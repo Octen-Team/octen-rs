@@ -59,7 +59,27 @@ fn request_schema(spec: &Value, path: &str) -> Value {
 
 /// Compares the keys of `value` with the schema's properties, level by level; `at` names the
 /// position like the entries of known_diffs.json.
+/// What a comparison reports: the kinds of the values and the fields the spec lacks, the spec's
+/// fields the SDK does not set, or both.
+#[derive(Clone, Copy, PartialEq)]
+enum Scope {
+    Values,
+    Coverage,
+    Both,
+}
+
 fn compare(spec: &Value, schema: &Value, value: &Value, at: &str, diffs: &mut Vec<String>) {
+    compare_with(spec, schema, value, at, Scope::Both, diffs);
+}
+
+fn compare_with(
+    spec: &Value,
+    schema: &Value,
+    value: &Value,
+    at: &str,
+    check: Scope,
+    diffs: &mut Vec<String>,
+) {
     let schema = resolve(spec, schema);
     let want = schema.get("type").and_then(Value::as_str).unwrap_or("");
     // The kind of value first: an array where the spec has a string (or the reverse) is drift too
@@ -73,7 +93,9 @@ fn compare(spec: &Value, schema: &Value, value: &Value, at: &str, diffs: &mut Ve
         _ => true,
     };
     if !ok {
-        diffs.push(format!("{at}: the spec says {want}, the SDK sends {value}"));
+        if check != Scope::Coverage {
+            diffs.push(format!("{at}: the spec says {want}, the SDK sends {value}"));
+        }
         return;
     }
     match value {
@@ -83,34 +105,68 @@ fn compare(spec: &Value, schema: &Value, value: &Value, at: &str, diffs: &mut Ve
             };
             let sdk: BTreeSet<&String> = obj.keys().collect();
             let spec_keys: BTreeSet<&String> = props.keys().collect();
-            for k in sdk.difference(&spec_keys) {
-                diffs.push(format!("{at}.{k}: in SDK but not in spec"));
+            if check != Scope::Coverage {
+                for k in sdk.difference(&spec_keys) {
+                    diffs.push(format!("{at}.{k}: in SDK but not in spec"));
+                }
             }
-            for k in spec_keys.difference(&sdk) {
-                diffs.push(format!("{at}.{k}: in spec but not set by the SDK"));
+            if check != Scope::Values {
+                for k in spec_keys.difference(&sdk) {
+                    diffs.push(format!("{at}.{k}: in spec but not set by the SDK"));
+                }
             }
             for (k, v) in obj {
                 if let Some(p) = props.get(k) {
-                    compare(spec, p, v, &format!("{at}.{k}"), diffs);
+                    compare_with(spec, p, v, &format!("{at}.{k}"), check, diffs);
                 }
             }
         }
         Value::Array(items) => {
-            // Objects: the union of the keys of every element, so variants with different keys are all
-            // covered. Scalars: each element against the item schema.
+            // Every element on its own for the kinds of its values; the union of the object elements
+            // for coverage, so variants with different keys together cover the item schema.
             let mut union = serde_json::Map::new();
-            for item in items {
-                match item {
-                    Value::Object(o) => union.extend(o.clone()),
-                    scalar => compare(spec, &schema["items"], scalar, &format!("{at}[]"), diffs),
+            for (i, item) in items.iter().enumerate() {
+                if check != Scope::Coverage {
+                    compare_with(
+                        spec,
+                        &schema["items"],
+                        item,
+                        &format!("{at}[{i}]"),
+                        Scope::Values,
+                        diffs,
+                    );
+                }
+                if let Value::Object(o) = item {
+                    union.extend(o.clone());
                 }
             }
-            if !union.is_empty() {
-                compare(spec, &schema["items"], &Value::Object(union), at, diffs);
+            if check != Scope::Values && !union.is_empty() {
+                compare_with(
+                    spec,
+                    &schema["items"],
+                    &Value::Object(union),
+                    at,
+                    Scope::Coverage,
+                    diffs,
+                );
             }
         }
         _ => {}
     }
+}
+
+/// The differences not excused by known_diffs.json; an entry there records a field the spec lacks,
+/// so it excuses only that, never a later mismatch at the same path.
+fn unexpected<'a>(diffs: &'a [String], known: &BTreeSet<String>) -> Vec<&'a str> {
+    diffs
+        .iter()
+        .filter(|d| {
+            !known
+                .iter()
+                .any(|k| **d == format!("{k}: in SDK but not in spec"))
+        })
+        .map(String::as_str)
+        .collect()
 }
 
 /// Every request field set, so each property of the spec must appear in the serialized body.
@@ -360,10 +416,7 @@ fn request_fields_match_spec() {
         let schema = request_schema(&spec, path);
         compare(&spec, &schema, &body, &ref_name(&schema), &mut diffs);
     }
-    let unexpected: Vec<_> = diffs
-        .iter()
-        .filter(|d| !known.iter().any(|k| d.starts_with(&format!("{k}:"))))
-        .collect();
+    let unexpected = unexpected(&diffs, &known);
     assert!(
         unexpected.is_empty(),
         "request fields differ from the spec:\n{unexpected:#?}"
@@ -730,5 +783,42 @@ fn contract_table_covers_every_method() {
     assert_eq!(
         paths, requests,
         "every method needs a full request in request_fields_match_spec"
+    );
+}
+
+// The comparator itself: a wrong kind in any array element is reported, even when a later element
+// has the same property with the right kind.
+#[test]
+fn compare_checks_every_array_element() {
+    let spec = json!({});
+    let schema = json!({"type": "array", "items": {"type": "object", "properties": {"type": {"type": "string"}, "url": {"type": "string"}}}});
+    let value = json!([{"type": ["text"]}, {"type": "image", "url": "u"}]);
+    let mut diffs = Vec::new();
+    compare(&spec, &schema, &value, "X", &mut diffs);
+    assert!(
+        diffs
+            .iter()
+            .any(|d| d.starts_with("X[0].type: the spec says string")),
+        "{diffs:?}"
+    );
+    // Coverage still uses every element: url comes from the second one
+    assert!(!diffs.iter().any(|d| d.contains("url")), "{diffs:?}");
+}
+
+// A known difference excuses only what it records, a field missing from the spec, not later type drift.
+#[test]
+fn known_diffs_excuse_only_missing_fields() {
+    let known = BTreeSet::from(["A.b".to_owned()]);
+    let diffs = vec![
+        "A.b: in SDK but not in spec".to_owned(),
+        "A.b: the spec says string, the SDK sends 1".to_owned(),
+        "A.c: in SDK but not in spec".to_owned(),
+    ];
+    assert_eq!(
+        unexpected(&diffs, &known),
+        vec![
+            "A.b: the spec says string, the SDK sends 1",
+            "A.c: in SDK but not in spec"
+        ]
     );
 }

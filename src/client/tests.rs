@@ -541,6 +541,33 @@ fn debug_output_hides_header_values() {
     assert!(!format!("{opts:?}").contains("call-secret"), "{opts:?}");
 }
 
+// Credentials on a custom reqwest builder, or in a base URL that fails validation, are not printed either.
+#[test]
+fn debug_output_hides_custom_client_and_base_url() {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        "authorization",
+        reqwest::header::HeaderValue::from_static("Bearer builder-secret"),
+    );
+    let client = Client::builder()
+        .api_key("k")
+        .http_client_builder(reqwest::Client::builder().default_headers(headers))
+        .build()
+        .unwrap();
+    assert!(
+        !format!("{client:?}").contains("builder-secret"),
+        "{client:?}"
+    );
+    let builder = Client::builder()
+        .api_key("k")
+        .base_url("https://user:pw-secret@example.com/?token=q-secret");
+    let shown = format!("{builder:?}");
+    assert!(
+        !shown.contains("pw-secret") && !shown.contains("q-secret"),
+        "{shown}"
+    );
+}
+
 // The SDK owns every retry: a retry policy on a custom HTTP client builder cannot resend a request.
 #[tokio::test]
 async fn custom_http_client_retry_policy_is_disabled() {

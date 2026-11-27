@@ -128,7 +128,8 @@ impl std::fmt::Debug for ClientBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClientBuilder")
             .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
-            .field("base_url", &self.base_url)
+            // Not validated yet, so it may hold credentials or a token
+            .field("base_url", &self.base_url.as_ref().map(|_| "<set>"))
             .field("timeout", &self.timeout)
             .field("max_retries", &self.max_retries)
             .field("headers", &header_names(&self.headers))

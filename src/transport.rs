@@ -26,7 +26,6 @@ impl std::fmt::Debug for Hooks {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct Transport {
     http: reqwest::Client,
     base_url: String,
@@ -34,6 +33,17 @@ pub(crate) struct Transport {
     max_retries: u32,
     #[cfg(test)]
     hooks: Hooks,
+}
+
+// The HTTP client is left out: its default headers, set on a custom builder, can hold a credential.
+impl std::fmt::Debug for Transport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Transport")
+            .field("base_url", &self.base_url)
+            .field("headers", &self.headers.keys().collect::<Vec<_>>())
+            .field("max_retries", &self.max_retries)
+            .finish_non_exhaustive()
+    }
 }
 
 /// A response whose envelope was judged successful.
