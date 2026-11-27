@@ -1,0 +1,10 @@
+[
+  {
+    "path": "PlaceSearchRequest.places.max_reviews",
+    "reason": "Supported by the server and the external API docs and exposed by octen-py and octen-cli; missing from the public OpenAPI. Docs owner notified."
+  },
+  {
+    "path": "BroadSearchResponse.msg",
+    "reason": "Returned by the server but absent from the public OpenAPI schema."
+  }
+]

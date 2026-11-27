@@ -1,0 +1,29 @@
+[package]
+name = "octen"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+resolver = "3"
+license = "MIT"
+description = "Official Rust SDK for the Octen API"
+repository = "https://github.com/Octen-Team/octen-rs"
+documentation = "https://docs.rs/octen"
+homepage = "https://docs.octen.ai"
+readme = "README.md"
+keywords = ["octen", "search", "embedding", "api", "sdk"]
+categories = ["api-bindings", "web-programming::http-client"]
+include = ["src/**/*", "Cargo.toml", "README.md", "CHANGELOG.md", "LICENSE"]
+
+[dependencies]
+bytes = "1.12.2"
+fastrand = "2.5.0"
+httpdate = "1.0.3"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "http2"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["raw_value"] }
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["time"] }
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }
+wiremock = "0.6.5"

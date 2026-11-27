@@ -1,0 +1,667 @@
+[
+  {
+    "name": "200 code null is success",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":null,\"results\":[]}",
+    "expect": {
+      "ok": true
+    }
+  },
+  {
+    "name": "200 code string zero is success",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":\"0\",\"results\":[]}",
+    "expect": {
+      "ok": true
+    }
+  },
+  {
+    "name": "200 code true is success",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":true,\"results\":[]}",
+    "expect": {
+      "ok": true
+    }
+  },
+  {
+    "name": "200 code missing is success",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"results\":[]}",
+    "expect": {
+      "ok": true
+    }
+  },
+  {
+    "name": "200 code 0 with msg is success",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":0,\"msg\":\"success\",\"results\":[]}",
+    "expect": {
+      "ok": true
+    }
+  },
+  {
+    "name": "200 code string non-numeric is success",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":\"abc\",\"results\":[]}",
+    "expect": {
+      "ok": true
+    }
+  },
+  {
+    "name": "200 code 1.5 is failure",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":1.5,\"msg\":\"fractional\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": 1.5,
+      "message": "fractional"
+    }
+  },
+  {
+    "name": "200 code 1001 is failure",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":1001,\"msg\":\"invalid query\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": 1001,
+      "message": "invalid query"
+    }
+  },
+  {
+    "name": "200 code -1 is failure",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":-1,\"msg\":\"negative\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": -1,
+      "message": "negative"
+    }
+  },
+  {
+    "name": "200 empty object is failure",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{}",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": null,
+      "message": "{}"
+    }
+  },
+  {
+    "name": "200 array is failure",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "[]",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": null,
+      "message": "[]"
+    }
+  },
+  {
+    "name": "200 JSON string is failure",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "\"hello\"",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": null,
+      "message": "\"hello\""
+    }
+  },
+  {
+    "name": "200 JSON null is failure",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "null",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": null,
+      "message": "null"
+    }
+  },
+  {
+    "name": "200 HTML is failure",
+    "status": 200,
+    "headers": {
+      "content-type": "text/html"
+    },
+    "body": "<html><body><h1>502 Bad Gateway</h1></body></html>",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": null,
+      "message": "<html><body><h1>502 Bad Gateway</h1></body></html>"
+    }
+  },
+  {
+    "name": "200 plain text is failure",
+    "status": 200,
+    "headers": {
+      "content-type": "text/plain"
+    },
+    "body": "ok",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": null,
+      "message": "ok"
+    }
+  },
+  {
+    "name": "200 empty body is failure",
+    "status": 200,
+    "headers": {},
+    "body": "",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": null,
+      "message": "HTTP 200"
+    }
+  },
+  {
+    "name": "502 HTML is server error",
+    "status": 502,
+    "headers": {
+      "content-type": "text/html"
+    },
+    "body": "<html><body><h1>502 Bad Gateway</h1></body></html>",
+    "expect": {
+      "ok": false,
+      "class": "OctenServerError",
+      "code": null,
+      "message": "<html><body><h1>502 Bad Gateway</h1></body></html>"
+    }
+  },
+  {
+    "name": "500 server error",
+    "status": 500,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"msg\":\"internal error\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenServerError",
+      "code": null,
+      "message": "internal error"
+    }
+  },
+  {
+    "name": "503 empty body",
+    "status": 503,
+    "headers": {},
+    "body": "",
+    "expect": {
+      "ok": false,
+      "class": "OctenServerError",
+      "code": null,
+      "message": "HTTP 503"
+    }
+  },
+  {
+    "name": "401 authentication",
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":401,\"msg\":\"invalid api key\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenAuthenticationError",
+      "code": 401,
+      "message": "invalid api key"
+    }
+  },
+  {
+    "name": "403 permission denied",
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"msg\":\"insufficient balance\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenPermissionDeniedError",
+      "code": null,
+      "message": "insufficient balance"
+    }
+  },
+  {
+    "name": "400 bad request",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":1002,\"msg\":\"query is required\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": 1002,
+      "message": "query is required"
+    }
+  },
+  {
+    "name": "422 bad request",
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"msg\":\"count out of range\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": null,
+      "message": "count out of range"
+    }
+  },
+  {
+    "name": "400 non-numeric code gives null",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":\"x\",\"msg\":\"bad\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": null,
+      "message": "bad"
+    }
+  },
+  {
+    "name": "404 falls back to base class",
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"msg\":\"not found\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": null,
+      "message": "not found"
+    }
+  },
+  {
+    "name": "408 is base class",
+    "status": 408,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"msg\":\"request timeout\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": null,
+      "message": "request timeout"
+    }
+  },
+  {
+    "name": "302 redirect is base class",
+    "status": 302,
+    "headers": {
+      "location": "https://example.com/"
+    },
+    "body": "",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": null,
+      "message": "HTTP 302"
+    }
+  },
+  {
+    "name": "429 with Retry-After 5",
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "5"
+    },
+    "body": "{\"msg\":\"slow down\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenRateLimitError",
+      "code": null,
+      "message": "slow down",
+      "retryAfter": 5
+    }
+  },
+  {
+    "name": "429 without Retry-After",
+    "status": 429,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"msg\":\"slow down\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenRateLimitError",
+      "code": null,
+      "message": "slow down",
+      "retryAfter": null
+    }
+  },
+  {
+    "name": "429 with Retry-After 61",
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "61"
+    },
+    "body": "{\"msg\":\"slow down\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenRateLimitError",
+      "code": null,
+      "message": "slow down",
+      "retryAfter": 61
+    }
+  },
+  {
+    "name": "429 with malformed Retry-After",
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "soon"
+    },
+    "body": "{\"msg\":\"slow down\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenRateLimitError",
+      "code": null,
+      "message": "slow down",
+      "retryAfter": null
+    }
+  },
+  {
+    "name": "message from msg",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"msg\":\"from msg\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": null,
+      "message": "from msg"
+    }
+  },
+  {
+    "name": "message from message",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"message\":\"from message\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": null,
+      "message": "from message"
+    }
+  },
+  {
+    "name": "message from detail",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"detail\":\"from detail\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": null,
+      "message": "from detail"
+    }
+  },
+  {
+    "name": "message from error string",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"error\":\"from error\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": null,
+      "message": "from error"
+    }
+  },
+  {
+    "name": "message from nested error.message",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"error\":{\"message\":\"from nested\"}}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": null,
+      "message": "from nested"
+    }
+  },
+  {
+    "name": "message from doubly nested error",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"error\":{\"error\":{\"msg\":\"deep\"}}}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": null,
+      "message": "deep"
+    }
+  },
+  {
+    "name": "msg wins over message",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"message\":\"second\",\"msg\":\"first\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": null,
+      "message": "first"
+    }
+  },
+  {
+    "name": "empty msg falls through to message",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"msg\":\"\",\"message\":\"second\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": null,
+      "message": "second"
+    }
+  },
+  {
+    "name": "no message field falls back to raw text",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":7}",
+    "expect": {
+      "ok": false,
+      "class": "OctenBadRequestError",
+      "code": 7,
+      "message": "{\"code\":7}"
+    }
+  },
+  {
+    "name": "raw text truncated to 500 chars",
+    "status": 502,
+    "headers": {
+      "content-type": "text/plain"
+    },
+    "body": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "expect": {
+      "ok": false,
+      "class": "OctenServerError",
+      "code": null,
+      "message": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  {
+    "name": "request id from header",
+    "status": 500,
+    "headers": {
+      "content-type": "application/json",
+      "x-request-id": "header-id"
+    },
+    "body": "{\"msg\":\"boom\",\"request_id\":\"body-id\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenServerError",
+      "code": null,
+      "message": "boom",
+      "requestId": "header-id"
+    }
+  },
+  {
+    "name": "request id from body",
+    "status": 500,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"msg\":\"boom\",\"request_id\":\"body-id\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenServerError",
+      "code": null,
+      "message": "boom",
+      "requestId": "body-id"
+    }
+  },
+  {
+    "name": "no request id",
+    "status": 500,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"msg\":\"boom\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenServerError",
+      "code": null,
+      "message": "boom",
+      "requestId": null
+    }
+  },
+  {
+    "name": "2xx failure request id from body",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":1001,\"msg\":\"bad\",\"request_id\":\"abc\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": 1001,
+      "message": "bad",
+      "requestId": "abc"
+    }
+  },
+  {
+    "name": "empty x-request-id header falls back to body request_id",
+    "status": 500,
+    "headers": {
+      "content-type": "application/json",
+      "x-request-id": ""
+    },
+    "body": "{\"msg\":\"boom\",\"request_id\":\"body-id\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenServerError",
+      "code": null,
+      "message": "boom",
+      "requestId": "body-id"
+    }
+  },
+  {
+    "name": "empty body request_id is ignored",
+    "status": 500,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"msg\":\"boom\",\"request_id\":\"\"}",
+    "expect": {
+      "ok": false,
+      "class": "OctenServerError",
+      "code": null,
+      "message": "boom",
+      "requestId": null
+    }
+  },
+  {
+    "name": "200 non-finite code is failure",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"code\":1e999}",
+    "expect": {
+      "ok": false,
+      "class": "OctenAPIError",
+      "code": null,
+      "message": "{\"code\":1e999}"
+    }
+  }
+]
