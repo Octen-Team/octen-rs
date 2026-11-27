@@ -92,7 +92,21 @@ fn compare(spec: &Value, schema: &Value, value: &Value, at: &str, diffs: &mut Ve
                 compare(spec, &schema["items"], &Value::Object(union), at, diffs);
             }
         }
-        _ => {}
+        scalar => {
+            let want = schema.get("type").and_then(Value::as_str).unwrap_or("");
+            let ok = match want {
+                "string" => scalar.is_string(),
+                "integer" => scalar.is_i64() || scalar.is_u64(),
+                "number" => scalar.is_number(),
+                "boolean" => scalar.is_boolean(),
+                _ => true,
+            };
+            if !ok {
+                diffs.push(format!(
+                    "{at}: the spec says {want}, the SDK sends {scalar}"
+                ));
+            }
+        }
     }
 }
 
@@ -596,6 +610,71 @@ fn examples(spec: &Value, path: &str) -> Vec<(String, Value)> {
         }
     }
     out
+}
+
+/// A response with every property of the schema set, built from the schema rather than from its
+/// examples, so a changed type or a new field shows even when the examples stay the same. An array
+/// whose items are a `oneOf` gets one element per variant.
+fn synthesize(spec: &Value, schema: &Value, depth: usize) -> Value {
+    assert!(depth < 16, "schema nests too deeply");
+    let schema = resolve(spec, schema);
+    if let Some(values) = schema.get("enum").and_then(Value::as_array) {
+        return values[0].clone();
+    }
+    if let Some(variants) = schema.get("oneOf").and_then(Value::as_array) {
+        return synthesize(spec, &variants[0], depth + 1);
+    }
+    match schema.get("type").and_then(Value::as_str) {
+        Some("string") => json!("x"),
+        Some("integer") => json!(1),
+        Some("number") => json!(1.5),
+        Some("boolean") => json!(true),
+        Some("array") => {
+            let items = resolve(spec, &schema["items"]);
+            match items.get("oneOf").and_then(Value::as_array) {
+                Some(variants) => Value::Array(
+                    variants
+                        .iter()
+                        .map(|v| synthesize(spec, v, depth + 1))
+                        .collect(),
+                ),
+                None => json!([synthesize(spec, &items, depth + 1)]),
+            }
+        }
+        _ => {
+            let mut obj = serde_json::Map::new();
+            if let Some(props) = schema.get("properties").and_then(Value::as_object) {
+                for (k, v) in props {
+                    obj.insert(k.clone(), synthesize(spec, v, depth + 1));
+                }
+            } else if let Some(extra) = schema.get("additionalProperties").filter(|v| v.is_object())
+            {
+                obj.insert("k".into(), synthesize(spec, extra, depth + 1));
+            }
+            Value::Object(obj)
+        }
+    }
+}
+
+#[test]
+fn spec_response_schemas_decode() {
+    let spec = spec();
+    let mut problems = Vec::new();
+    for (method, (path, check)) in contract_table() {
+        let schema = &spec["paths"][path]["post"]["responses"]["200"]["content"]
+            ["application/json"]["schema"];
+        let sample = synthesize(&spec, schema, 0);
+        match check(&sample) {
+            Err(e) => problems.push(format!(
+                "{method} ({path}): a response built from the schema does not decode: {e}"
+            )),
+            Ok(lost) if !lost.is_empty() => problems.push(format!(
+                "{method} ({path}): schema fields not modelled: {lost:?}"
+            )),
+            Ok(_) => {}
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
 }
 
 #[test]

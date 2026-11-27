@@ -10,14 +10,14 @@ const DEFAULT_MAX_RETRIES: u32 = 3;
 const API_KEY_ENV: &str = "OCTEN_API_KEY";
 
 /// Builds a [`Client`]; start with [`Client::builder`]. Problems are reported by [`ClientBuilder::build`].
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct ClientBuilder {
     api_key: Option<String>,
     base_url: Option<String>,
     timeout: Option<Duration>,
     max_retries: Option<u32>,
     headers: Vec<(String, String)>,
-    http_client: Option<reqwest::Client>,
+    http_client: Option<reqwest::ClientBuilder>,
     #[cfg(test)]
     pub(crate) hooks: crate::transport::Hooks,
 }
@@ -55,11 +55,11 @@ impl ClientBuilder {
         self
     }
 
-    /// Sends requests through this client, for proxies, custom TLS or connection pooling. Its own
-    /// timeout applies on top of the SDK's, and its redirect policy is kept: the SDK's default client
-    /// follows no redirects.
-    pub fn http_client(mut self, client: reqwest::Client) -> Self {
-        self.http_client = Some(client);
+    /// Builds the HTTP client from this builder, for proxies, custom TLS or connection pooling. The SDK
+    /// sets its redirect policy to follow none, so the API key never reaches another host; a timeout
+    /// set on it applies on top of the SDK's and is never retried.
+    pub fn http_client_builder(mut self, builder: reqwest::ClientBuilder) -> Self {
+        self.http_client = Some(builder);
         self
     }
 
@@ -100,15 +100,14 @@ impl ClientBuilder {
         for (name, value) in &self.headers {
             check_header("header", name, value)?;
         }
-        let http = match self.http_client {
-            Some(c) => c,
-            None => reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .build()
-                .map_err(|e| Error::Connection {
-                    source: Box::new(e),
-                })?,
-        };
+        let http = self
+            .http_client
+            .unwrap_or_default()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| Error::Connection {
+                source: Box::new(e),
+            })?;
         let transport = Transport::new(
             http,
             base_url,
@@ -119,6 +118,20 @@ impl ClientBuilder {
             self.hooks,
         )?;
         Ok(Client::from_parts(transport, self.timeout))
+    }
+}
+
+impl std::fmt::Debug for ClientBuilder {
+    // The key is never shown: builders end up in configuration logs.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClientBuilder")
+            .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
+            .field("base_url", &self.base_url)
+            .field("timeout", &self.timeout)
+            .field("max_retries", &self.max_retries)
+            .field("headers", &self.headers)
+            .field("http_client", &self.http_client.is_some())
+            .finish()
     }
 }
 

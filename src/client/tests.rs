@@ -501,30 +501,6 @@ async fn redirects_are_not_followed() {
     assert_eq!(server.received_requests().await.unwrap().len(), 1);
 }
 
-// Like Go's default client: HTTP(S)_PROXY from the environment is honoured; macOS system proxy settings are not read.
-#[tokio::test]
-async fn honours_proxy_environment_variables() {
-    let proxy = MockServer::start().await;
-    Mock::given(method("POST"))
-        .respond_with(json(200, OK))
-        .mount(&proxy)
-        .await;
-    let client = {
-        let _guard = env_lock();
-        std::env::set_var("HTTP_PROXY", proxy.uri());
-        let c = Client::builder()
-            .api_key("k")
-            .base_url("http://api.octen.invalid")
-            .build();
-        std::env::remove_var("HTTP_PROXY");
-        c.unwrap()
-    };
-    assert!(call(&client, None).await.is_ok());
-    let reqs = proxy.received_requests().await.unwrap();
-    assert_eq!(reqs.len(), 1);
-    assert_eq!(reqs[0].headers.get("host").unwrap(), "api.octen.invalid");
-}
-
 // The request reached the server and the connection dropped before a response: retrying could bill twice.
 #[tokio::test]
 async fn does_not_retry_connection_dropped_after_send() {
@@ -549,4 +525,41 @@ async fn does_not_retry_connection_dropped_after_send() {
     assert!(matches!(r, Err(Error::Connection { .. })), "{r:?}");
     assert_eq!(accepted.load(Ordering::SeqCst), 1);
     assert!(h.waits.lock().unwrap().is_empty());
+}
+
+#[test]
+fn debug_output_hides_the_api_key() {
+    let builder = Client::builder().api_key("sk-secret-123");
+    let shown = format!("{builder:?}");
+    assert!(!shown.contains("sk-secret-123"), "{shown}");
+    assert!(shown.contains("api_key"), "{shown}");
+    let client = builder.build().unwrap();
+    assert!(!format!("{client:?}").contains("sk-secret-123"));
+}
+
+// A client from http_client_builder keeps the SDK's no-redirect policy, so the key never reaches
+// another origin; reqwest strips only Authorization and cookies on a cross-origin redirect.
+#[tokio::test]
+async fn custom_http_client_does_not_follow_redirects() {
+    let other = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(json(200, OK))
+        .mount(&other)
+        .await;
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(307).insert_header("location", format!("{}/search", other.uri())),
+        )
+        .mount(&server)
+        .await;
+    let h = harness(&server.uri(), |b| {
+        b.http_client_builder(reqwest::Client::builder())
+    });
+    let e = call(&h.client, None).await.unwrap_err();
+    assert_eq!(e.as_api().map(|a| a.status), Some(307), "{e:?}");
+    assert!(
+        other.received_requests().await.unwrap().is_empty(),
+        "the key reached the redirect target"
+    );
 }

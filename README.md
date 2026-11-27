@@ -146,7 +146,7 @@ Notes on individual endpoints:
 
 - **Result type.** `result_type` on Web Search and Web Search Premier, and inside Broad Search's `search_options`, is `Standard` (the default) or `Dynamic`, which returns only relevant results up to `count` and adjusts the highlight length per result. Web Search echoes the type used in `meta.result_type`.
 - **Video Search** is an invite-only beta; a key without access gets a 403.
-- **Design Search** needs a query unless `images.group_id` is set; `DesignSearchParams::group` returns a whole page or deck in order. `design_facts` and `group.master` are maps decided by the server.
+- **Design Search** needs a query unless `images.group_id` is set. `DesignSearchParams::group` returns the images of a page or deck in order, but only as many as `images.count` (5 by default, at most 100): set it from the `group.total` of a result to get the whole group. `design_facts` and `group.master` are maps decided by the server.
 - **Business Search** entities decode by `type` into `Company` or `Person`; any other or missing type decodes as `Other` with the entity's JSON, so new types never break decoding.
 - **Extract.** A call can succeed while some URLs fail (`status` is `failed` with an `error_message`); failed URLs are not billed. With `query`, each result carries `highlights` instead of `full_content`. `mode` is `Standard` (the default), `Advanced` (slower, more expensive, for pages that are hard to reach) or `Auto`; `resolved_mode` is the mode a URL is billed at, and `meta.usage.successful_by_mode` counts them. The body's `timeout` (1 to 60 s, 30 by default) bounds each URL on the server; it is not the HTTP timeout, which the SDK derives from it (see [Retries and timeouts](#retries-and-timeouts)).
 - **Embedding.** `results[i].index` is the position in `input`. Texts longer than 10,000 characters are cut by the server, which says so in `meta.warning`.
@@ -177,7 +177,7 @@ client.search().with_options(opts).search(&SearchParams::new("hello")).await?;
 - The API key is trimmed and sent only in the `x-api-key` header. The `User-Agent` is `octen-rust-sdk/<version>`.
 - Redirects are not followed, so the key cannot be forwarded to another host; a redirect is reported as an `Error::Api` saying so.
 - Proxies come from the `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` environment variables. Operating-system proxy settings are not read.
-- `http_client(reqwest::Client)` sends requests through your own client, for custom TLS, proxies or pooling. Its own timeout applies on top of the SDK's, and its redirect policy is kept, so configure it not to follow redirects.
+- `http_client_builder(reqwest::ClientBuilder)` builds the HTTP client from your builder, for custom TLS, proxies or pooling. The SDK sets it to follow no redirects; a timeout you set on it applies on top of the SDK's and is never retried.
 - Invalid options (no key, a base URL that is not an absolute http(s) URL or that has credentials, a query or a fragment, a zero timeout, an invalid header name, a header value or key with a control character other than tab) make `build()` return an `Error::Validation` whose `field` names the option. A bad per-call option is returned by the call the same way.
 
 ## Local validation
@@ -223,7 +223,7 @@ match client.search().search(&octen::SearchParams::new("hello")).await {
 
 **Retried automatically** (up to `max_retries` times, 3 by default): HTTP 408, 429, 500, 502, 503 and 504, and errors while establishing the connection, which never reached the server. Waits are `1 s * 2^(n-1)` before retry `n`, plus up to 25% jitter, at most 60 s; a `Retry-After` (seconds or an HTTP date) is honoured on 429 and 503, and if it asks for more than 60 s the call stops with the error. Every retry sends the same request body.
 
-**Not retried:** an SDK timeout (the server may have finished and billed the request), a connection that failed after the request was sent, and any other status. Dropping the future cancels the call.
+**Not retried:** an SDK timeout (the server may have finished and billed the request), a timeout of the HTTP client itself, a connection that failed after the request was sent, and any other status. Dropping the future cancels the call. Separately, the HTTP client resends a request on its own only when an HTTP/2 server refused it before processing it (`REFUSED_STREAM`), which cannot bill twice.
 
 **Timeouts** cover each attempt, from connecting to reading the whole body. The call's `RequestOptions` timeout wins, then the client's `timeout`, then the endpoint default: 30 s; 120 s for Broad Search; for Extract, the per-URL `timeout` clamped to 1 to 60 s (30 s when unset) plus 90 s, so 120 s by default and 150 s with `timeout: Some(60)`. A client timeout shorter than that also applies to Extract and can stop it while the server is still working; set a per-call timeout in that case.
 

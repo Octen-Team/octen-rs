@@ -10,6 +10,8 @@ use crate::retry::parse_retry_after;
 
 const MESSAGE_RAW_LIMIT: usize = 500;
 const MESSAGE_KEYS: [&str; 4] = ["msg", "message", "detail", "error"];
+/// How many nested `error` objects are searched; each level is parsed once more.
+const MAX_ERROR_DEPTH: usize = 8;
 
 /// Top-level keys only: values stay unparsed slices of the body, so a large `data` is scanned, not built.
 type TopLevel<'a> = HashMap<String, &'a RawValue>;
@@ -34,7 +36,10 @@ pub(crate) fn judge(status: u16, headers: &HeaderMap, body: &Bytes) -> Result<()
             }
         }
     }
-    let mut message = top.as_ref().and_then(find_message).unwrap_or_default();
+    let mut message = top
+        .as_ref()
+        .and_then(|obj| find_message(obj, 0))
+        .unwrap_or_default();
     if message.is_empty() {
         message = truncate_utf16(&String::from_utf8_lossy(text), MESSAGE_RAW_LIMIT);
     }
@@ -97,19 +102,16 @@ fn string(raw: &RawValue) -> Option<String> {
     serde_json::from_str::<String>(raw.get()).ok()
 }
 
-/// msg, message, detail, error in order, recursing into an `error` object.
-fn find_message(obj: &TopLevel) -> Option<String> {
+/// msg, message, detail, error in order, recursing into an `error` object up to [`MAX_ERROR_DEPTH`].
+fn find_message(obj: &TopLevel, depth: usize) -> Option<String> {
     for key in MESSAGE_KEYS {
         let Some(raw) = obj.get(key) else { continue };
         if let Some(s) = string(raw).filter(|s| !s.is_empty()) {
             return Some(s);
         }
-        if key == "error" {
-            if let Some(found) = serde_json::from_str::<TopLevel>(raw.get())
-                .ok()
-                .as_ref()
-                .and_then(find_message)
-            {
+        if key == "error" && depth < MAX_ERROR_DEPTH {
+            let nested = serde_json::from_str::<TopLevel>(raw.get()).ok();
+            if let Some(found) = nested.as_ref().and_then(|o| find_message(o, depth + 1)) {
                 return Some(found);
             }
         }
@@ -297,6 +299,25 @@ mod tests {
         );
         let e = judge(301, &h, &Bytes::new()).unwrap_err();
         assert_eq!(e.status, 301);
+    }
+
+    // Each nested "error" object is parsed once more; a cap keeps a hostile body from exhausting the stack
+    #[test]
+    fn deeply_nested_error_objects_are_bounded() {
+        let depth = 100_000;
+        let body = r#"{"error":"#.repeat(depth) + r#"{"msg":"deep"}"# + &"}".repeat(depth);
+        let started = std::time::Instant::now();
+        let e = judge(500, &HeaderMap::new(), &Bytes::from(body)).unwrap_err();
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "took {:?}",
+            started.elapsed()
+        );
+        assert_eq!(e.status, 500);
+        // A few levels are still searched
+        let shallow = r#"{"error":{"error":{"message":"inner"}}}"#;
+        let e = judge(500, &HeaderMap::new(), &Bytes::from(shallow)).unwrap_err();
+        assert_eq!(e.message, "inner");
     }
 
     #[test]

@@ -138,7 +138,9 @@ impl Transport {
                     Attempt::Timeout => return Err(Error::Timeout { timeout }),
                     // Only a failure to connect is known not to have reached the server.
                     Attempt::Network { source } => {
-                        let pre_send = source.is_connect();
+                        // A timeout of the HTTP client itself, even while connecting, is final like the SDK's own.
+                        let pre_send =
+                            retryable_network_error(source.is_connect(), source.is_timeout());
                         (
                             Error::Connection {
                                 source: Box::new(source),
@@ -210,6 +212,11 @@ impl Transport {
     }
 }
 
+/// Only a failure while connecting never reached the server; a timeout, even while connecting, is final.
+fn retryable_network_error(is_connect: bool, is_timeout: bool) -> bool {
+    is_connect && !is_timeout
+}
+
 /// Adds `extra` to `headers`, each replacing any header of the same name.
 fn merge_headers(
     headers: &mut HeaderMap,
@@ -227,4 +234,20 @@ fn merge_headers(
         headers.insert(name, value);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::retryable_network_error;
+
+    #[test]
+    fn only_connect_failures_that_are_not_timeouts_are_retried() {
+        assert!(retryable_network_error(true, false));
+        assert!(
+            !retryable_network_error(true, true),
+            "a connect timeout must not be retried"
+        );
+        assert!(!retryable_network_error(false, true));
+        assert!(!retryable_network_error(false, false));
+    }
 }
