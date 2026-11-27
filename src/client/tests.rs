@@ -57,7 +57,7 @@ fn harness(base_url: &str, configure: impl FnOnce(ClientBuilder) -> ClientBuilde
 async fn call(c: &Client, opts: Option<&RequestOptions>) -> Result<Reply, Error> {
     c.post::<_, Reply>("/search", &q(), opts, Duration::from_secs(30))
         .await
-        .map(|(r, _)| r)
+        .map(|(r, _, _)| r)
 }
 
 fn json(status: u16, body: &str) -> ResponseTemplate {
@@ -484,19 +484,22 @@ async fn undecodable_2xx_is_decode_error_with_body() {
 async fn redirects_are_not_followed() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
-        .respond_with(
-            ResponseTemplate::new(301)
-                .insert_header("location", "https://elsewhere.example/search"),
-        )
+        .respond_with(ResponseTemplate::new(301).insert_header(
+            "location",
+            "https://elsewhere.example/search?token=redirect-secret",
+        ))
         .mount(&server)
         .await;
     let h = harness(&server.uri(), |b| b);
     let e = call(&h.client, None).await.unwrap_err();
     let api = e.as_api().expect("an API error");
     assert_eq!(api.status, 301);
+    assert!(
+        !api.message.contains("redirect-secret") && !format!("{e}").contains("redirect-secret")
+    );
     assert_eq!(
         api.message,
-        "HTTP 301 redirect to https://elsewhere.example/search; redirects are not followed, check base_url"
+        "HTTP 301 redirect to https://elsewhere.example; redirects are not followed, check base_url"
     );
     assert_eq!(server.received_requests().await.unwrap().len(), 1);
 }

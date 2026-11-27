@@ -501,3 +501,24 @@ async fn api_errors_pass_through() {
     assert!(api.is_permission_denied());
     assert_eq!(api.message, "no access");
 }
+
+// The request ID is in the body as a rule; one sent only in the x-request-id header is used too.
+#[tokio::test]
+async fn request_id_falls_back_to_the_header() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("x-request-id", "hdr-id")
+                .set_body_raw(r#"{"code":0,"data":{}}"#, "application/json"),
+        )
+        .mount(&server)
+        .await;
+    let resp = client(&server)
+        .search()
+        .search(&SearchParams::new("q"))
+        .await
+        .unwrap();
+    assert_eq!(resp.request_id, "hdr-id");
+    assert_eq!(resp.raw_json(), br#"{"code":0,"data":{}}"#);
+}

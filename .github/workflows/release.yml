@@ -13,6 +13,8 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Bound to the crates.io trusted publisher; its protection rules gate the publishing credentials
+    environment: release
     permissions:
       contents: read
       id-token: write # crates.io trusted publishing

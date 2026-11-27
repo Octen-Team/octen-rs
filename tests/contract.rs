@@ -822,3 +822,80 @@ fn known_diffs_excuse_only_missing_fields() {
         ]
     );
 }
+
+/// The required properties of a schema, its allOf members' included.
+fn required(spec: &Value, schema: &Value) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let mut stack = vec![schema.clone()];
+    while let Some(s) = stack.pop() {
+        if let Some(r) = s.get("$ref").and_then(Value::as_str) {
+            stack.push(
+                spec["components"]["schemas"][r.trim_start_matches("#/components/schemas/")]
+                    .clone(),
+            );
+            continue;
+        }
+        for name in s
+            .get("required")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            out.insert(name.as_str().unwrap().to_owned());
+        }
+        stack.extend(
+            s.get("allOf")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default(),
+        );
+    }
+    out
+}
+
+/// The smallest request each method can send: its constructor alone.
+fn minimal_requests() -> Vec<(&'static str, Value)> {
+    let v = |p: &dyn erased::Ser| p.to_value();
+    vec![
+        ("/search", v(&SearchParams::new("q"))),
+        ("/search-premier", v(&SearchParams::new("q"))),
+        ("/broad-search", v(&BroadSearchParams::new("q"))),
+        ("/news-search", v(&NewsSearchParams::new("q"))),
+        ("/business-search", v(&BusinessSearchParams::new("q"))),
+        ("/pulse-search", v(&PulseSearchParams::new("q"))),
+        ("/place-search", v(&PlaceSearchParams::new("q"))),
+        ("/image-search", v(&ImageSearchParams::text("q"))),
+        ("/video-search", v(&VideoSearchParams::text("q"))),
+        ("/design-search", v(&DesignSearchParams::new("q"))),
+        ("/extract", v(&ExtractParams::new(["https://a.com"]))),
+        ("/embedding", v(&EmbeddingParams::new(["a"]))),
+        (
+            "/vl-embedding",
+            v(&VlEmbeddingParams::new(
+                VlEmbeddingModel::OctenVlEmbedding,
+                vec![VlEmbeddingContent::Text("a".into())],
+            )),
+        ),
+    ]
+}
+
+// A field the spec makes required must be sent by the smallest request too, or every such call gets a 400.
+#[test]
+fn minimal_requests_send_required_fields() {
+    let spec = spec();
+    let mut missing = Vec::new();
+    for (path, body) in minimal_requests() {
+        let schema = request_schema(&spec, path);
+        for name in required(&spec, &schema) {
+            if body.get(&name).is_none() {
+                missing.push(format!(
+                    "{path}: {name} is required by the spec but not sent by default"
+                ));
+            }
+        }
+    }
+    assert!(missing.is_empty(), "{missing:#?}");
+    let paths: BTreeSet<&str> = minimal_requests().into_iter().map(|(p, _)| p).collect();
+    let all: BTreeSet<&str> = contract_table().values().map(|(p, _)| *p).collect();
+    assert_eq!(paths, all, "every method needs a minimal request");
+}

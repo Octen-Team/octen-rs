@@ -140,9 +140,14 @@ fn truncate_utf16(s: &str, n: usize) -> String {
 /// The transport's message for a 3xx, which it never follows.
 pub(crate) fn redirect_message(status: u16, headers: &HeaderMap) -> String {
     let mut msg = format!("HTTP {status} redirect");
-    if let Some(loc) = header(headers, "location").filter(|v| !v.is_empty()) {
+    // Only the origin: a redirect target can be a signed or SSO URL carrying a token
+    let origin = header(headers, "location")
+        .and_then(|loc| reqwest::Url::parse(loc).ok())
+        .map(|url| url.origin().ascii_serialization())
+        .filter(|o| o != "null");
+    if let Some(origin) = origin {
         msg.push_str(" to ");
-        msg.push_str(loc);
+        msg.push_str(&origin);
     }
     msg + "; redirects are not followed, check base_url"
 }

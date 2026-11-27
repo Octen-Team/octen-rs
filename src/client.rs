@@ -55,14 +55,14 @@ impl Client {
     }
 
     /// Validates and posts `params`, then decodes the successful envelope into `R`, returning the
-    /// raw body too. The attempt timeout is the call's, else the client's, else `default_timeout`.
+    /// raw body and the `x-request-id` header too. The attempt timeout is the call's, else the client's, else `default_timeout`.
     pub(crate) async fn post<P: Params, R: DeserializeOwned>(
         &self,
         path: &str,
         params: &P,
         opts: Option<&RequestOptions>,
         default_timeout: Duration,
-    ) -> Result<(R, bytes::Bytes), Error> {
+    ) -> Result<(R, bytes::Bytes, Option<String>), Error> {
         params.validate()?;
         if let Some(o) = opts {
             o.check()?;
@@ -84,7 +84,14 @@ impl Client {
             .post(path, body.into(), timeout, extra)
             .await?;
         match serde_json::from_slice::<R>(strip_bom(&ok.body)) {
-            Ok(r) => Ok((r, ok.body)),
+            Ok(r) => {
+                let header_id = ok
+                    .headers
+                    .get("x-request-id")
+                    .and_then(|v| v.to_str().ok())
+                    .map(str::to_owned);
+                Ok((r, ok.body, header_id))
+            }
             Err(source) => Err(Error::Decode {
                 source,
                 request_id: request_id_of_body(&ok.headers, &ok.body),

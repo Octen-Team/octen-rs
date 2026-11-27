@@ -45,10 +45,14 @@ macro_rules! resource {
                 P: Params,
                 Response<D, M>: DeserializeOwned,
             {
-                let (resp, raw) = self
+                let (mut resp, raw, header_id) = self
                     .client
                     .post::<P, Response<D, M>>(path, params, self.options.as_ref(), default_timeout)
                     .await?;
+                // The body carries the request ID as a rule; the header is the fallback
+                if resp.request_id.is_empty() {
+                    resp.request_id = header_id.unwrap_or_default();
+                }
                 Ok(resp.with_raw(raw))
             }
         }
