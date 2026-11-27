@@ -879,20 +879,111 @@ fn minimal_requests() -> Vec<(&'static str, Value)> {
     ]
 }
 
-// A field the spec makes required must be sent by the smallest request too, or every such call gets a 400.
+/// The required properties `value` lacks, level by level through nested objects and arrays.
+fn missing_required(spec: &Value, schema: &Value, value: &Value, at: &str, out: &mut Vec<String>) {
+    let resolved = resolve(spec, schema);
+    match value {
+        Value::Object(obj) => {
+            for name in required(spec, schema) {
+                if !obj.contains_key(&name) {
+                    out.push(format!(
+                        "{at}.{name} is required by the spec but not sent by default"
+                    ));
+                }
+            }
+            if let Some(props) = resolved.get("properties").and_then(Value::as_object) {
+                for (k, v) in obj {
+                    if let Some(p) = props.get(k) {
+                        missing_required(spec, p, v, &format!("{at}.{k}"), out);
+                    }
+                }
+            }
+        }
+        Value::Array(items) => {
+            for (i, item) in items.iter().enumerate() {
+                missing_required(spec, &resolved["items"], item, &format!("{at}[{i}]"), out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Each nested option object as `Default` sends it (usually `{}`), so a field the spec makes required
+/// inside it shows too.
+fn minimal_nested_requests() -> Vec<(&'static str, Value)> {
+    let v = |p: &dyn erased::Ser| p.to_value();
+    vec![
+        (
+            "/search",
+            v(&SearchParams {
+                highlight: Some(HighlightOptions::default()),
+                full_content: Some(FullContentOptions::default()),
+                ..SearchParams::new("q")
+            }),
+        ),
+        (
+            "/broad-search",
+            v(&BroadSearchParams {
+                search_options: Some(WebSearchOptions::default()),
+                ..BroadSearchParams::new("q")
+            }),
+        ),
+        (
+            "/news-search",
+            v(&NewsSearchParams {
+                subjects: Some(NewsSubjectOptions::default()),
+                ..NewsSearchParams::new("q")
+            }),
+        ),
+        (
+            "/business-search",
+            v(&BusinessSearchParams {
+                entities: Some(BusinessEntityOptions::default()),
+                ..BusinessSearchParams::new("q")
+            }),
+        ),
+        (
+            "/place-search",
+            v(&PlaceSearchParams {
+                places: Some(PlaceCardOptions::default()),
+                web_search: Some(PlaceWebSearchOptions::default()),
+                user_location: Some(PlaceUserLocation::default()),
+                ..PlaceSearchParams::new("q")
+            }),
+        ),
+        (
+            "/design-search",
+            v(&DesignSearchParams {
+                images: Some(DesignImageOptions {
+                    snippet: Some(DesignSnippetOptions::default()),
+                    ..Default::default()
+                }),
+                web_search: Some(DesignWebSearchOptions::default()),
+                ..DesignSearchParams::new("q")
+            }),
+        ),
+        (
+            "/extract",
+            v(&ExtractParams {
+                include_links: Some(ExtractLinksOptions::default()),
+                ..ExtractParams::new(["https://a.com"])
+            }),
+        ),
+    ]
+}
+
+// A field the spec makes required must be sent by the smallest request too, at every level, or every
+// such call gets a 400.
 #[test]
 fn minimal_requests_send_required_fields() {
     let spec = spec();
     let mut missing = Vec::new();
-    for (path, body) in minimal_requests() {
+    for (path, body) in minimal_requests()
+        .into_iter()
+        .chain(minimal_nested_requests())
+    {
         let schema = request_schema(&spec, path);
-        for name in required(&spec, &schema) {
-            if body.get(&name).is_none() {
-                missing.push(format!(
-                    "{path}: {name} is required by the spec but not sent by default"
-                ));
-            }
-        }
+        missing_required(&spec, &schema, &body, path, &mut missing);
     }
     assert!(missing.is_empty(), "{missing:#?}");
     let paths: BTreeSet<&str> = minimal_requests().into_iter().map(|(p, _)| p).collect();

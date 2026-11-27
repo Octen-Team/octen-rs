@@ -191,7 +191,7 @@ Before sending anything the SDK checks only the required inputs, and reports a p
 - VL Embedding needs 1 to 20 items (`input.contents`), none blank (`input.contents[0]`).
 - `latitude`, `longitude` and `fps` must be finite: JSON has no NaN or infinity.
 
-Value ranges (such as `count`, `dimension` or the number of images) are left to the server, which answers out-of-range values with a 400. Enum fields are typed, so only documented values can be sent.
+Value ranges (such as `count`, `dimension` or the number of images) are left to the server, which answers most out-of-range values with a 400. Extract is the exception for two fields: the server moves an out-of-range `timeout` or `max_age_seconds` to the nearest bound instead: `timeout` to 1 to 60 s, and `max_age_seconds` to at least 300, so a smaller value can still return a cached copy. Enum fields are typed, so only documented values can be sent.
 
 ## Errors
 
