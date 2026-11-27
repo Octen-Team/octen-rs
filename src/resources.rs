@@ -8,7 +8,11 @@ use crate::business_search::{BusinessSearchParams, BusinessSearchResponse};
 use crate::client::{Client, Params};
 use crate::config::{RequestOptions, DEFAULT_TIMEOUT};
 use crate::design_search::{DesignSearchParams, DesignSearchResponse};
+use crate::embedding::{
+    EmbeddingParams, EmbeddingResponse, VlEmbeddingParams, VlEmbeddingResponse,
+};
 use crate::error::Error;
+use crate::extract::{ExtractParams, ExtractResponse};
 use crate::image_search::{ImageSearchParams, ImageSearchResponse};
 use crate::news_search::{NewsSearchParams, NewsSearchResponse};
 use crate::place_search::{PlaceSearchParams, PlaceSearchResponse};
@@ -81,6 +85,46 @@ resource! {
 resource! {
     /// Design Search: `client.design_search()`.
     DesignSearchResource, design_search
+}
+
+resource! {
+    /// Extract: `client.extract()`.
+    ExtractResource, extract
+}
+
+resource! {
+    /// Embedding: `client.embedding()`.
+    EmbeddingResource, embedding
+}
+
+resource! {
+    /// VL Embedding: `client.vl_embedding()`.
+    VlEmbeddingResource, vl_embedding
+}
+
+impl ExtractResource<'_> {
+    /// Extract (`POST /extract`): the content of 1 to 20 URLs, one result per URL; match results to
+    /// your input by URL. The default timeout is the per-URL `timeout`, clamped to 1 to 60 s (30 s
+    /// when unset), plus 90 s, unless the client or the call sets one.
+    pub async fn extract(&self, params: &ExtractParams) -> Result<ExtractResponse, Error> {
+        self.call("/extract", params, params.default_timeout())
+            .await
+    }
+}
+
+impl EmbeddingResource<'_> {
+    /// Embedding (`POST /embedding`): one vector per text; match results to your input by `index`.
+    pub async fn create(&self, params: &EmbeddingParams) -> Result<EmbeddingResponse, Error> {
+        self.call("/embedding", params, DEFAULT_TIMEOUT).await
+    }
+}
+
+impl VlEmbeddingResource<'_> {
+    /// VL Embedding (`POST /vl-embedding`): one vector per item, or one fused vector with
+    /// `enable_fusion`. A long video can take longer than the default 30 s: set a timeout for the call.
+    pub async fn create(&self, params: &VlEmbeddingParams) -> Result<VlEmbeddingResponse, Error> {
+        self.call("/vl-embedding", params, DEFAULT_TIMEOUT).await
+    }
 }
 
 impl SearchResource<'_> {
@@ -167,6 +211,7 @@ mod tests {
 
     use super::*;
     use crate::config::ClientBuilder;
+    use crate::embedding::{VlEmbeddingContent, VlEmbeddingModel};
     use crate::transport::Hooks;
 
     const OK: &str = r#"{"code":0,"request_id":"r","data":{}}"#;
@@ -249,6 +294,27 @@ mod tests {
         let (c, t) = client(&server.uri(), |b| b.timeout(Duration::from_secs(7)));
         calls(&c, None).await;
         assert_eq!(*t.lock().unwrap(), vec![Duration::from_secs(7); 10]);
+
+        // Extract derives its default from the per-URL timeout, clamped to 1-60 s, plus 90 s
+        let (c, t) = client(&server.uri(), |b| b);
+        for per_url in [None, Some(60), Some(0), Some(-5), Some(100), Some(10)] {
+            let p = ExtractParams {
+                timeout: per_url,
+                ..ExtractParams::new(["https://a.com"])
+            };
+            c.extract().extract(&p).await.unwrap();
+        }
+        c.embedding()
+            .create(&EmbeddingParams::new(["a"]))
+            .await
+            .unwrap();
+        let vl = VlEmbeddingParams::new(
+            VlEmbeddingModel::OctenVlEmbedding,
+            vec![VlEmbeddingContent::Text("a".into())],
+        );
+        c.vl_embedding().create(&vl).await.unwrap();
+        let secs: Vec<u64> = t.lock().unwrap().iter().map(Duration::as_secs).collect();
+        assert_eq!(secs, vec![120, 150, 91, 91, 150, 100, 30, 30]);
 
         // A per-call timeout overrides both, on the handle it is set on
         let opts = RequestOptions::new().timeout(Duration::from_secs(3));

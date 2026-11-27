@@ -270,6 +270,41 @@ fn full_requests() -> Vec<(&'static str, Value)> {
             end_time: s("2026-02-01"),
         }),
     };
+    let extract = ExtractParams {
+        mode: Some(ExtractMode::Advanced),
+        query: s("pricing"),
+        max_age_seconds: Some(300),
+        format: Some(Format::Markdown),
+        timeout: Some(30),
+        include_images: Some(true),
+        include_videos: Some(true),
+        include_audio: Some(true),
+        include_links: Some(ExtractLinksOptions {
+            scope: Some(ExtractLinkScope::PreferInternal),
+            max_links: Some(10),
+        }),
+        ..ExtractParams::new(["https://a.com"])
+    };
+    let embedding = EmbeddingParams {
+        model: Some(EmbeddingModel::OctenEmbedding4B),
+        dimension: Some(8),
+        input_type: Some(InputType::Document),
+        ..EmbeddingParams::new(["a"])
+    };
+    let vl = VlEmbeddingParams {
+        enable_fusion: Some(true),
+        dimension: Some(8),
+        fps: Some(0.5),
+        instruct: s("Represent the image"),
+        ..VlEmbeddingParams::new(
+            VlEmbeddingModel::OctenVlEmbedding,
+            vec![
+                VlEmbeddingContent::Text("a".into()),
+                VlEmbeddingContent::Image("https://e.com/a.jpg".into()),
+                VlEmbeddingContent::Video("https://e.com/v.mp4".into()),
+            ],
+        )
+    };
     let v = |p: &dyn erased::Ser| p.to_value();
     vec![
         ("/search", v(&web)),
@@ -282,6 +317,9 @@ fn full_requests() -> Vec<(&'static str, Value)> {
         ("/image-search", v(&image)),
         ("/video-search", v(&video)),
         ("/design-search", v(&design)),
+        ("/extract", v(&extract)),
+        ("/embedding", v(&embedding)),
+        ("/vl-embedding", v(&vl)),
     ]
 }
 
@@ -429,6 +467,16 @@ fn enum_values_match_spec() {
             "web_search.time_range",
             strs(TimeRange::ALL),
         ),
+        ("ExtractRequest", "mode", strs(ExtractMode::ALL)),
+        ("ExtractRequest", "format", strs(Format::ALL)),
+        (
+            "ExtractRequest",
+            "include_links.scope",
+            strs(ExtractLinkScope::ALL),
+        ),
+        ("EmbeddingRequest", "model", strs(EmbeddingModel::ALL)),
+        ("EmbeddingRequest", "input_type", strs(InputType::ALL)),
+        ("VLEmbeddingRequest", "model", strs(VlEmbeddingModel::ALL)),
     ];
     let mut diffs = Vec::new();
     for (schema, path, sdk) in cases {
@@ -521,6 +569,18 @@ fn contract_table() -> BTreeMap<&'static str, (&'static str, Check)> {
             "design_search().search",
             ("/design-search", roundtrip::<DesignSearchResponse>),
         ),
+        (
+            "extract().extract",
+            ("/extract", roundtrip::<ExtractResponse>),
+        ),
+        (
+            "embedding().create",
+            ("/embedding", roundtrip::<EmbeddingResponse>),
+        ),
+        (
+            "vl_embedding().create",
+            ("/vl-embedding", roundtrip::<VlEmbeddingResponse>),
+        ),
     ])
 }
 
@@ -575,6 +635,9 @@ fn contract_table_covers_every_method() {
         "image_search().search",
         "video_search().search",
         "design_search().search",
+        "extract().extract",
+        "embedding().create",
+        "vl_embedding().create",
     ];
     let table = contract_table();
     let listed: BTreeSet<&str> = methods.into_iter().collect();
