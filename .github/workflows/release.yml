@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # crates.io trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the main-branch check below needs history
+      - name: Install stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt
+          rustup default stable
+      - name: Verify the tag matches Cargo.toml
+        run: |
+          VERSION="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "octen") | .version')"
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "Tag '$GITHUB_REF_NAME' and version '$VERSION' in Cargo.toml must match"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Verify the tagged commit is on main
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Commit $GITHUB_SHA is not on main; releases must be tagged from main"
+            exit 1
+          fi
+      - name: Check
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+      # A version already on crates.io (such as the first one, published by hand) is not published again.
+      - name: Check whether this version is published
+        id: published
+        run: |
+          status="$(curl -s -o /dev/null -w '%{http_code}' -A 'octen-rs release workflow' "https://crates.io/api/v1/crates/octen/$VERSION")"
+          echo "status=$status"
+          echo "exists=$([ "$status" = 200 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Authenticate with crates.io
+        if: steps.published.outputs.exists == 'false'
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Publish
+        if: steps.published.outputs.exists == 'false'
+        run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

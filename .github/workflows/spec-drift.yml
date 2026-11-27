@@ -1,0 +1,26 @@
+name: Spec drift
+
+on:
+  schedule:
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Download the live OpenAPI spec
+        run: curl -fsSL --retry 3 -o "$RUNNER_TEMP/openapi.json" https://docs.octen.ai/api-reference/openapi.json
+      # Fails when the live spec no longer matches the types; it never rewrites testdata/openapi.json.
+      - name: Compare the types with the live spec
+        run: cargo test --locked --test contract
+        env:
+          OCTEN_SPEC_PATH: ${{ runner.temp }}/openapi.json

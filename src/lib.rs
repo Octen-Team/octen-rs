@@ -1,4 +1,4 @@
-//! Official Rust SDK for the [Octen API](https://docs.octen.ai).
+#![doc = include_str!("../README.md")]
 
 mod business_search;
 mod client;
