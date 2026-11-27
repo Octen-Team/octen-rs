@@ -228,9 +228,11 @@ fn merge_headers(
         let name = HeaderName::from_bytes(name.as_bytes()).map_err(|_| {
             Error::validation(field, format!("Header name {name:?} is not a valid token."))
         })?;
-        let value = HeaderValue::from_str(value).map_err(|_| {
+        let mut value = HeaderValue::from_str(value).map_err(|_| {
             Error::validation(field, format!("The value of header {name:?} is not valid."))
         })?;
+        // Shown as "Sensitive" in Debug output: a custom header can carry a credential.
+        value.set_sensitive(true);
         headers.insert(name, value);
     }
     Ok(())

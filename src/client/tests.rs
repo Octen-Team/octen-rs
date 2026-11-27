@@ -527,6 +527,38 @@ async fn does_not_retry_connection_dropped_after_send() {
     assert!(h.waits.lock().unwrap().is_empty());
 }
 
+// A custom credential header is redacted too, wherever it is printed.
+#[test]
+fn debug_output_hides_header_values() {
+    let builder = Client::builder()
+        .api_key("k")
+        .header("authorization", "Bearer tok-secret");
+    assert!(!format!("{builder:?}").contains("tok-secret"));
+    assert!(format!("{builder:?}").contains("authorization"));
+    let client = builder.build().unwrap();
+    assert!(!format!("{client:?}").contains("tok-secret"), "{client:?}");
+    let opts = RequestOptions::new().header("authorization", "Bearer call-secret");
+    assert!(!format!("{opts:?}").contains("call-secret"), "{opts:?}");
+}
+
+// The SDK owns every retry: a retry policy on a custom HTTP client builder cannot resend a request.
+#[tokio::test]
+async fn custom_http_client_retry_policy_is_disabled() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(json(200, OK))
+        .mount(&server)
+        .await;
+    // A policy that asks reqwest to retry every response
+    let policy = reqwest::retry::for_host("127.0.0.1").classify_fn(|rr| rr.retryable());
+    let h = harness(&server.uri(), |b| {
+        b.max_retries(0)
+            .http_client_builder(reqwest::Client::builder().retry(policy))
+    });
+    call(&h.client, None).await.unwrap();
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}
+
 #[test]
 fn debug_output_hides_the_api_key() {
     let builder = Client::builder().api_key("sk-secret-123");

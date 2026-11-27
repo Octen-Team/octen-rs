@@ -61,6 +61,21 @@ fn request_schema(spec: &Value, path: &str) -> Value {
 /// position like the entries of known_diffs.json.
 fn compare(spec: &Value, schema: &Value, value: &Value, at: &str, diffs: &mut Vec<String>) {
     let schema = resolve(spec, schema);
+    let want = schema.get("type").and_then(Value::as_str).unwrap_or("");
+    // The kind of value first: an array where the spec has a string (or the reverse) is drift too
+    let ok = match want {
+        "object" => value.is_object(),
+        "array" => value.is_array(),
+        "string" => value.is_string(),
+        "integer" => value.is_i64() || value.is_u64(),
+        "number" => value.is_number(),
+        "boolean" => value.is_boolean(),
+        _ => true,
+    };
+    if !ok {
+        diffs.push(format!("{at}: the spec says {want}, the SDK sends {value}"));
+        return;
+    }
     match value {
         Value::Object(obj) => {
             let Some(props) = schema.get("properties").and_then(Value::as_object) else {
@@ -81,32 +96,20 @@ fn compare(spec: &Value, schema: &Value, value: &Value, at: &str, diffs: &mut Ve
             }
         }
         Value::Array(items) => {
-            // The union of the keys of every element, so variants with different keys are all covered
+            // Objects: the union of the keys of every element, so variants with different keys are all
+            // covered. Scalars: each element against the item schema.
             let mut union = serde_json::Map::new();
             for item in items {
-                if let Value::Object(o) = item {
-                    union.extend(o.clone());
+                match item {
+                    Value::Object(o) => union.extend(o.clone()),
+                    scalar => compare(spec, &schema["items"], scalar, &format!("{at}[]"), diffs),
                 }
             }
             if !union.is_empty() {
                 compare(spec, &schema["items"], &Value::Object(union), at, diffs);
             }
         }
-        scalar => {
-            let want = schema.get("type").and_then(Value::as_str).unwrap_or("");
-            let ok = match want {
-                "string" => scalar.is_string(),
-                "integer" => scalar.is_i64() || scalar.is_u64(),
-                "number" => scalar.is_number(),
-                "boolean" => scalar.is_boolean(),
-                _ => true,
-            };
-            if !ok {
-                diffs.push(format!(
-                    "{at}: the spec says {want}, the SDK sends {scalar}"
-                ));
-            }
-        }
+        _ => {}
     }
 }
 

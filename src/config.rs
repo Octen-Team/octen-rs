@@ -104,6 +104,8 @@ impl ClientBuilder {
             .http_client
             .unwrap_or_default()
             .redirect(reqwest::redirect::Policy::none())
+            // The SDK owns every retry, so a policy on a custom builder cannot resend a request.
+            .retry(reqwest::retry::never())
             .build()
             .map_err(|e| Error::Connection {
                 source: Box::new(e),
@@ -129,21 +131,35 @@ impl std::fmt::Debug for ClientBuilder {
             .field("base_url", &self.base_url)
             .field("timeout", &self.timeout)
             .field("max_retries", &self.max_retries)
-            .field("headers", &self.headers)
+            .field("headers", &header_names(&self.headers))
             .field("http_client", &self.http_client.is_some())
             .finish()
     }
 }
 
+/// Header names only: a value can be a credential.
+fn header_names(headers: &[(String, String)]) -> Vec<&str> {
+    headers.iter().map(|(name, _)| name.as_str()).collect()
+}
+
 /// Options for one call, passed with `with_options` on a resource:
 /// `client.embedding().with_options(opts).create(&params)`.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 #[non_exhaustive]
 pub struct RequestOptions {
     /// The timeout of each attempt of this call, overriding the client's and the endpoint's default.
     pub timeout: Option<Duration>,
     /// Headers for this call; one with the name of a client header replaces it.
     pub headers: Vec<(String, String)>,
+}
+
+impl std::fmt::Debug for RequestOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RequestOptions")
+            .field("timeout", &self.timeout)
+            .field("headers", &header_names(&self.headers))
+            .finish()
+    }
 }
 
 impl RequestOptions {

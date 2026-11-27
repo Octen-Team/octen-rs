@@ -199,7 +199,7 @@ Value ranges (such as `count`, `dimension` or the number of images) are left to 
 |---|---|
 | A non-2xx response, or a 2xx whose body is not a usable result | `Error::Api(ApiError)` |
 | An attempt exceeded its timeout | `Error::Timeout { timeout }` |
-| A network failure | `Error::Connection { source }` |
+| A network failure, or a timeout set on a custom HTTP client (`source` is the `reqwest::Error`, whose `is_timeout()` is true) | `Error::Connection { source }` |
 | Rejected before sending | `Error::Validation { field, message }` |
 | A successful response that does not fit the typed response | `Error::Decode { source, body, request_id }`: the call was billed, do not retry it; the data is in `body` |
 
@@ -223,7 +223,7 @@ match client.search().search(&octen::SearchParams::new("hello")).await {
 
 **Retried automatically** (up to `max_retries` times, 3 by default): HTTP 408, 429, 500, 502, 503 and 504, and errors while establishing the connection, which never reached the server. Waits are `1 s * 2^(n-1)` before retry `n`, plus up to 25% jitter, at most 60 s; a `Retry-After` (seconds or an HTTP date) is honoured on 429 and 503, and if it asks for more than 60 s the call stops with the error. Every retry sends the same request body.
 
-**Not retried:** an SDK timeout (the server may have finished and billed the request), a timeout of the HTTP client itself, a connection that failed after the request was sent, and any other status. Dropping the future cancels the call. Separately, the HTTP client resends a request on its own only when an HTTP/2 server refused it before processing it (`REFUSED_STREAM`), which cannot bill twice.
+**Not retried:** an SDK timeout (the server may have finished and billed the request), a timeout of the HTTP client itself, a connection that failed after the request was sent, and any other status. Dropping the future cancels the call. The SDK makes every retry itself: the HTTP client's own retries are turned off, also on a builder passed to `http_client_builder`.
 
 **Timeouts** cover each attempt, from connecting to reading the whole body. The call's `RequestOptions` timeout wins, then the client's `timeout`, then the endpoint default: 30 s; 120 s for Broad Search; for Extract, the per-URL `timeout` clamped to 1 to 60 s (30 s when unset) plus 90 s, so 120 s by default and 150 s with `timeout: Some(60)`. A client timeout shorter than that also applies to Extract and can stop it while the server is still working; set a per-call timeout in that case.
 
