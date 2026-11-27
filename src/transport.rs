@@ -15,6 +15,8 @@ pub(crate) const USER_AGENT_VALUE: &str = concat!("octen-rust-sdk/", env!("CARGO
 pub(crate) struct Hooks {
     pub(crate) waits: Option<std::sync::Arc<std::sync::Mutex<Vec<Duration>>>>,
     pub(crate) jitter: Option<f64>,
+    /// The attempt timeout of each call, recorded when set.
+    pub(crate) timeouts: Option<std::sync::Arc<std::sync::Mutex<Vec<Duration>>>>,
 }
 
 #[cfg(test)]
@@ -94,6 +96,10 @@ impl Transport {
         timeout: Duration,
         extra: &[(String, String)],
     ) -> Result<Success, Error> {
+        #[cfg(test)]
+        if let Some(t) = &self.hooks.timeouts {
+            t.lock().unwrap().push(timeout);
+        }
         let url = format!("{}/{}", self.base_url, path.trim_start_matches('/'));
         let mut headers = self.headers.clone();
         merge_headers(&mut headers, extra, "headers")?;

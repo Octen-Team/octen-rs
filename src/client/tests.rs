@@ -44,6 +44,7 @@ fn harness(base_url: &str, configure: impl FnOnce(ClientBuilder) -> ClientBuilde
     builder.hooks = Hooks {
         waits: Some(waits.clone()),
         jitter: Some(0.0),
+        timeouts: None,
     };
     // Building reads proxy settings from the environment, which another test may be changing
     let client = {
